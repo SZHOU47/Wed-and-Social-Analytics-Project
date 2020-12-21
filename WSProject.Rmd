@@ -1,0 +1,256 @@
+---
+title: "WSProject"
+author: "Shengqi Zhou"
+date: "3/31/2020"
+output: word_document
+---
+
+```{r}
+cab <- read.csv("/Users/zshengqi/Desktop/data.csv")
+cab
+```
+
+```{r}
+# delete columns with missing value
+data <- na.omit(cab)
+data$ID <- seq.int(nrow(data))
+data
+```
+# LASSO regression and Best subset selection
+
+```{r}
+library(glmnet)
+library(ISLR)
+library(leaps)
+```
+
+```{r}
+# remove dummy variable
+data$id <- NULL
+data$timestamp <- NULL
+data$month <- NULL
+data$datetime <- NULL
+data$timezone <- NULL
+data$source <- NULL
+data$destination <- NULL
+data$cab_type <- NULL
+data$product_id <- NULL
+data$name <- NULL
+data$latitude <-NULL
+data$longitude <- NULL
+data$short_summary <- NULL
+data$long_summary <- NULL
+data$icon <- NULL
+data$uvIndex <- NULL
+data$day <- NULL
+```
+
+```{r}
+data
+```
+
+```{r}
+regfit=regsubsets(price ~.,data=data,nvmax= 30) #the command returns the best model given the number of regressors included. The argument "nvmax" allows you specify the size of the largest model to fit.
+summary(regfit)
+```
+
+```{r}
+reg.summary=summary(regfit)
+names(reg.summary) # check what additional information are included in the regression output
+```
+
+```{r}
+reg.summary$bic #check BIC of all models 
+```
+
+```{r}
+plot(reg.summary$bic,xlab="Number of Variables",ylab="BIC") #plot bic for different models
+```
+
+```{r}
+best_number =which.min(reg.summary$bic) #find the model with the lowest BIC
+best_number
+```
+
+```{r}
+coef(regfit,id=best_number) #check what variables are included in the model with the lowest BIC as well as its coefficients
+```
+
+# Lasso regression
+
+
+```{r}
+x = model.matrix(price ~ ., data = data)[,-3]
+y = data$price
+```
+
+```{r}
+#LASSO regression
+lasso =glmnet(x, y ,alpha=1) #build a LASSO regression
+cv =cv.glmnet(x, y ,alpha=1) # use cv to select shrinkage parameter
+bestlam_l =cv$lambda.min #find the best shrinkage parameter
+bestlam_l
+```
+
+```{r}
+lasso.pred = predict(lasso ,s=bestlam_l ,newx=x) #making prediction using the best shrinkage parameter
+lasso.err = mean((lasso.pred-y)^2) #calculate MSE
+lasso.err
+```
+
+```{r}
+best.fit =regsubsets(price ~ .,data=data,nvmax=30)
+coef(best.fit, id=best_number)
+```
+
+```{r}
+lmbest <- lm(price ~ distance + surge_multiplier , data = data)
+summary(lmbest)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----------------------------------------------------------------------------------------------------------------------------
+
+```{r}
+data$price_per_distance <- data$price/data$distance
+head(data)
+```
+
+```{r}
+data <-data[(data$price_per_distance <= 100),]
+head(data)
+```
+
+```{r}
+library(zoom)
+```
+
+```{r}
+plot(data$distance,data$price_per_distance, pch = 19, 
+     col = "black", xlab = "distance", ylab = "price_per_distance")
+```
+
+```{r}
+plot(x, y1, type = "b", pch = 19, 
+     col = "red", xlab = "x", ylab = "y")
+```
+
+```{r}
+library(dplyr)
+lyft = data %>% filter(data$cab_type == "Lyft")
+uber = data %>% filter(data$cab_type == "Uber" & data$price_per_distance < 100)
+lyft
+uber
+```
+
+
+```{r}
+plot(uber$price_per_distance ~ uber$distance, data=uber)
+plot(lyft$price_per_distance ~ lyft$distance, data=lyft)
+```
+
+```{r}
+attach(data)
+train = (data$ID <= 510380)
+cab.test = data[!train,]
+dim(cab.test)
+cab_type.test = cab_type[!train]
+```
+
+```{r}
+# check correlation
+cor(price,distance)
+```
+
+```{r}
+# perform logistic regression
+glm.fits = glm(cab_type ~ price + distance + surge_multiplier + temperature, data = data,family=binomial, subset = train)
+summary(glm.fits)
+coef(glm.fits) 
+```
+
+```{r}
+glm.fit = lm(price ~ distance + surge_multiplier + temperature + humidity + windSpeed + visibility, data = data, subset = train)
+summary(glm.fit)
+```
+
+```{r}
+glm.probs=predict(glm.fits, cab.test, type="response")
+contrasts(cab_type)
+```
+
+```{r}
+glm.pred=rep("Lyft",127596) 
+glm.pred[glm.probs >.5]= "Uber"
+table(glm.pred, cab_type.test)
+mean(glm.pred == cab_type.test) # correct predictions
+mean(glm.pred != cab_type.test) # false predictions
+```
+
+```{r}
+# perform LQA
+library(MASS) 
+lda.fit = lda(cab_type ~ price + distance, data = data, subset = train) 
+lda.fit 
+plot(lda.fit)
+```
+
+```{r}
+lda.pred=predict(lda.fit, cab.test)
+names(lda.pred)
+lda.class=lda.pred$class
+table(lda.class ,cab_type.test)
+mean(lda.class == cab_type.test)
+mean(lda.class != cab_type.test)
+```
+
+```{r}
+# perform QDA
+library(MASS)
+qda.fit=qda(cab_type ~ price + distance, data = data, subset = train) 
+qda.fit
+```
+
+```{r}
+qda.class=predict(qda.fit, cab.test)$class 
+table(qda.class ,cab_type.test)
+mean(qda.class == cab_type.test) # correct predictions
+mean(qda.class != cab_type.test) # false predictions
+```
+
+
+
+
+
+
+
+
+
+
